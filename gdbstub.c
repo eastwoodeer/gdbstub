@@ -63,7 +63,7 @@ struct gio debug_io = {
 	.put_char = socket_put_char,
 };
 
-static int _get_packet(u8 *buf, size_t buf_len, size_t *len)
+static int _recv_packet(u8 *buf, size_t buf_len, size_t *len)
 {
 	u8 ch = '0';
 	u8 checksum = 0;
@@ -99,6 +99,34 @@ static int _get_packet(u8 *buf, size_t buf_len, size_t *len)
 	}
 
 	debug_io.put_char('+');
+
+	return 0;
+}
+
+static int _send_packet(const char *buf, size_t len)
+{
+	u8 checksum = 0;
+
+	debug_io.put_char('$');
+	while (len-- > 0) {
+		checksum += *buf;
+		debug_io.put_char(*buf++);
+	}
+	debug_io.put_char('#');
+
+	u8 checksum_buf[2] = { 0 };
+	if (byte2hex(&checksum, 1, checksum_buf, sizeof(checksum_buf))) {
+		return -1;
+	}
+
+	printf("buf %c %c", checksum_buf[0], checksum_buf[1]);
+
+	debug_io.put_char(checksum_buf[0]);
+	debug_io.put_char(checksum_buf[1]);
+
+	if (debug_io.get_char() != '+') {
+		return -1;
+	}
 
 	return 0;
 }
@@ -145,8 +173,21 @@ int main(int argc, char *argv[])
 		while (1) {
 			u8 buf[1024] = { 0 };
 			size_t len = 0;
-			_get_packet(buf, 1024, &len);
+			_recv_packet(buf, 1024, &len);
 			printf("recv: %s\n", buf);
+
+			u8 *ptr = buf;
+			switch (*ptr++) {
+			case '?':
+				_send_packet("S05", 3);
+				break;
+			default: {
+				char buf[1024] = { 0 };
+				sprintf(buf, "+$#00");
+				send(client_fd, buf, 5, 0);
+				break;
+			}
+			}
 
 			/* sprintf(buf, "+$#00"); */
 

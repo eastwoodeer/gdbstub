@@ -1,7 +1,7 @@
 all: gdbstub
 
 gdbstub: gdbstub.c hex.c
-	gcc $^ -o $@
+	gcc -Wall $^ -o $@
 
 clean:
 	@rm -f gdbstub
