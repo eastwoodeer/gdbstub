@@ -6,6 +6,8 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
+#include "hex.h"
+
 typedef unsigned char u8;
 typedef int i32;
 
@@ -64,6 +66,7 @@ struct gio debug_io = {
 static int _get_packet(u8 *buf, size_t buf_len, size_t *len)
 {
 	u8 ch = '0';
+	u8 checksum = 0;
 
 	while (ch != '$') {
 		ch = debug_io.get_char();
@@ -77,9 +80,25 @@ static int _get_packet(u8 *buf, size_t buf_len, size_t *len)
 			break;
 		}
 
+		checksum += ch;
+
 		buf[*len] = ch;
 		*len += 1;
 	}
+
+	u8 ck1, ck2;
+	if (char2hex(debug_io.get_char(), &ck1) ||
+	    char2hex(debug_io.get_char(), &ck2)) {
+		error("char2hex failed;");
+	}
+	u8 expected_checksum = (ck1 << 4) + ck2;
+	if (checksum != expected_checksum) {
+		debug_io.put_char('-');
+		error("checksum error, got %d, expected checksum: %d.\n",
+		      checksum, expected_checksum);
+	}
+
+	debug_io.put_char('+');
 
 	return 0;
 }
@@ -125,24 +144,15 @@ int main(int argc, char *argv[])
 
 		while (1) {
 			u8 buf[1024] = { 0 };
-			/* int n = recv(client_fd, buf, 1024, 0); */
-			/* if (!n) { */
-			/* 	break; */
-			/* } */
-
-			/* if (n < 0) { */
-			/* 	error("read failed."); */
-			/* } */
 			size_t len = 0;
 			_get_packet(buf, 1024, &len);
-
 			printf("recv: %s\n", buf);
 
-			sprintf(buf, "+$#00");
+			/* sprintf(buf, "+$#00"); */
 
-			if (send(client_fd, buf, 5, 0) < 0) {
-				error("send failed.\n");
-			}
+			/* if (send(client_fd, buf, 5, 0) < 0) { */
+			/* 	error("send failed.\n"); */
+			/* } */
 		}
 	}
 
