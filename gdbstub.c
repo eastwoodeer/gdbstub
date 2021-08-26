@@ -9,6 +9,8 @@
 #include "hex.h"
 
 typedef unsigned char u8;
+typedef unsigned int u32;
+typedef unsigned long long u64;
 typedef int i32;
 
 #define error(...)                                                             \
@@ -119,14 +121,44 @@ static int _send_packet(const char *buf, size_t len)
 		return -1;
 	}
 
-	printf("buf %c %c", checksum_buf[0], checksum_buf[1]);
-
 	debug_io.put_char(checksum_buf[0]);
 	debug_io.put_char(checksum_buf[1]);
 
 	if (debug_io.get_char() != '+') {
 		return -1;
 	}
+
+	return 0;
+}
+
+struct regs {
+	u64 gprs[32];
+	u32 pc;
+	u32 msr;
+	u32 cr;
+	u32 lr;
+	u32 ctr;
+	u32 xer;
+};
+
+int send_registers()
+{
+	char buf[1024] = { 0 };
+	u32 regs_len = sizeof(struct regs);
+	struct regs r;
+
+	for (int i = 0; i < 32; i++) {
+		r.gprs[i] = 0;
+	}
+
+	r.pc = 0x12345678;
+	r.msr = 0x00002830;
+
+	if (byte2hex((u8 *)&r, regs_len, (u8 *)buf, regs_len * 2)) {
+		return -1;
+	}
+
+	_send_packet(buf, regs_len * 2);
 
 	return 0;
 }
@@ -175,25 +207,39 @@ int main(int argc, char *argv[])
 			size_t len = 0;
 			_recv_packet(buf, 1024, &len);
 			printf("recv: %s\n", buf);
+			u32 addr;
+			u32 addr_len;
 
 			u8 *ptr = buf;
 			switch (*ptr++) {
 			case '?':
 				_send_packet("S05", 3);
 				break;
-			default: {
-				char buf[1024] = { 0 };
-				sprintf(buf, "+$#00");
-				send(client_fd, buf, 5, 0);
+			case 'g':
+				send_registers();
+				break;
+			case 'p':
+				/* TODO */
+				addr = strtol((const char *)ptr, (char **)&ptr,
+					      16);
+
+				break;
+			case 'm':
+				addr = strtol((const char *)ptr, (char **)&ptr,
+					      16);
+				if (*ptr != ',') {
+					error("m command parse failed.\n");
+				}
+				ptr++;
+				addr_len = strtol((const char *)ptr,
+						  (char **)&ptr, 16);
+
+				printf("addr: %d, len: %d\n", addr, addr_len);
+				break;
+			default:
+				_send_packet("", 0);
 				break;
 			}
-			}
-
-			/* sprintf(buf, "+$#00"); */
-
-			/* if (send(client_fd, buf, 5, 0) < 0) { */
-			/* 	error("send failed.\n"); */
-			/* } */
 		}
 	}
 
